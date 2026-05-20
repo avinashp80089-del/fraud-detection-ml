@@ -5,6 +5,6 @@ venv/
 mlruns/
 *.pkl
 *.joblib
-data/*.csv
-data/*.parquet
+data/raw/*.csv
+data/raw/*.parquet
 .DS_Store
