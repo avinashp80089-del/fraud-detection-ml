@@ -1,17 +1,15 @@
-"""Data loading, feature engineering, and class imbalance handling for fraud detection."""
-from typing import Tuple
 import numpy as np
 import pandas as pd
 from imblearn.over_sampling import SMOTE
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from typing import Tuple
 
 
-FRAUD_RATE = 0.003  # 0.3% positive rate matching production distribution
+FRAUD_RATE = 0.003
 
 
 def load_transaction_data(path: str) -> pd.DataFrame:
-    """Load raw transaction data and apply basic cleaning."""
     df = pd.read_csv(path, parse_dates=["timestamp"])
     df = df.dropna(subset=["amount", "user_id", "timestamp"])
     df = df[df["amount"] > 0]
@@ -19,15 +17,9 @@ def load_transaction_data(path: str) -> pd.DataFrame:
 
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Build velocity, behavioral, and temporal features.
-    Transaction velocity signals were the root cause of the production drift event —
-    they are the most predictive features (confirmed via SHAP).
-    """
-    df = df.copy()
-    df = df.sort_values(["user_id", "timestamp"])
+    df = df.copy().sort_values(["user_id", "timestamp"])
 
-    # Velocity signals (top SHAP features)
+    # velocity signals — top SHAP features by a wide margin
     df["txn_count_1h"] = (
         df.groupby("user_id")["timestamp"]
         .transform(lambda s: s.expanding().count())
@@ -45,22 +37,19 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         .transform(lambda x: x.rolling(window=168, min_periods=1).std().fillna(0))
     )
 
-    # Temporal features
-    df["hour_of_day"] = df["timestamp"].dt.hour
-    df["day_of_week"] = df["timestamp"].dt.dayofweek
+    ts = df["timestamp"]
+    df["hour_of_day"] = ts.dt.hour
+    df["day_of_week"] = ts.dt.dayofweek
     df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
     df["is_night"] = ((df["hour_of_day"] < 6) | (df["hour_of_day"] > 22)).astype(int)
 
-    # Amount features
     df["amount_log"] = np.log1p(df["amount"])
     df["amount_zscore"] = (
         df.groupby("user_id")["amount"]
         .transform(lambda x: (x - x.mean()) / (x.std() + 1e-6))
     )
 
-    # Cross features
     df["velocity_x_amount"] = df["txn_count_1h"] * df["amount_log"]
-
     return df
 
 
@@ -72,16 +61,9 @@ FEATURE_COLS = [
 ]
 
 
-def handle_class_imbalance(
-    X: np.ndarray, y: np.ndarray, random_state: int = 42
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Apply SMOTE to recover recall on 0.3% fraud rate.
-    SMOTE + custom threshold calibration recovered 19pp recall in production.
-    """
+def handle_class_imbalance(X: np.ndarray, y: np.ndarray, random_state: int = 42):
     smote = SMOTE(sampling_strategy=0.1, random_state=random_state, k_neighbors=5)
-    X_resampled, y_resampled = smote.fit_resample(X, y)
-    return X_resampled, y_resampled
+    return smote.fit_resample(X, y)
 
 
 def prepare_dataset(
@@ -91,7 +73,6 @@ def prepare_dataset(
     apply_smote: bool = True,
     random_state: int = 42,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, StandardScaler]:
-    """Full preprocessing pipeline: features → SMOTE → stratified split."""
     df = engineer_features(df)
     features = [c for c in FEATURE_COLS if c in df.columns]
 
@@ -113,7 +94,6 @@ def prepare_dataset(
 
 
 def generate_sample_data(n_samples: int = 50_000, random_state: int = 42) -> pd.DataFrame:
-    """Generate synthetic blockchain transaction data for demo/testing."""
     rng = np.random.RandomState(random_state)
     n_users = 5_000
     timestamps = pd.date_range("2024-01-01", periods=n_samples, freq="1min")
@@ -124,14 +104,16 @@ def generate_sample_data(n_samples: int = 50_000, random_state: int = 42) -> pd.
         "amount": np.abs(rng.lognormal(mean=4.0, sigma=1.5, size=n_samples)),
         "timestamp": timestamps,
         "merchant_category": rng.choice(["crypto", "retail", "transfer", "atm"], n_samples),
-        "country_code": rng.choice(["US", "UK", "NG", "RU", "CN", "DE"], n_samples, p=[0.5, 0.15, 0.1, 0.1, 0.1, 0.05]),
+        "country_code": rng.choice(
+            ["US", "UK", "NG", "RU", "CN", "DE"], n_samples,
+            p=[0.5, 0.15, 0.1, 0.1, 0.1, 0.05]
+        ),
     })
 
-    # Inject ~0.3% fraud with distinguishable patterns
     n_fraud = int(n_samples * FRAUD_RATE)
     fraud_idx = rng.choice(n_samples, n_fraud, replace=False)
     df["is_fraud"] = 0
     df.loc[fraud_idx, "is_fraud"] = 1
-    df.loc[fraud_idx, "amount"] *= rng.uniform(5, 20, n_fraud)  # fraud txns are larger
+    df.loc[fraud_idx, "amount"] *= rng.uniform(5, 20, n_fraud)
 
     return df.sort_values("timestamp").reset_index(drop=True)
