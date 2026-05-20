@@ -98,7 +98,7 @@ def detect_drift(
     for col in feature_cols:
         if col not in reference_df.columns or col not in current_df.columns:
             continue
-        psi = _psi(reference_df[col].dropna().values, current_df[col].dropna().values)
+        psi = _population_stability_index(reference_df[col].dropna().values, current_df[col].dropna().values)
         report["features"][col] = {"psi": round(psi, 4), "drifted": psi > threshold}
         if psi > threshold:
             report["drifted"].append(col)
@@ -111,7 +111,7 @@ def detect_drift(
     return report
 
 
-def _psi(reference: np.ndarray, current: np.ndarray, n_bins: int = 10) -> float:
+def _population_stability_index(reference: np.ndarray, current: np.ndarray, n_bins: int = 10) -> float:
     bins = np.percentile(reference, np.linspace(0, 100, n_bins + 1))
     bins[0], bins[-1] = -np.inf, np.inf
 
