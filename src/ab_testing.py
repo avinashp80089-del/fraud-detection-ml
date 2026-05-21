@@ -48,7 +48,7 @@ def run_proportion_test(
         "relative_lift_pct": round(100 * delta / p_c, 2),
         "z_statistic": round(z, 4),
         "p_value": round(p_value, 6),
-        "significant": p_value < alpha,
+        "significant": bool(p_value < alpha),
         "confidence_interval_95": (round(delta - ci_margin, 5), round(delta + ci_margin, 5)),
     }
 
@@ -70,7 +70,7 @@ def run_metric_ttest(
         "delta": round(float(delta), 5),
         "t_statistic": round(float(t_stat), 4),
         "p_value": round(float(p_value), 6),
-        "significant": p_value < alpha,
+        "significant": bool(p_value < alpha),
         "confidence_interval_95": (round(float(delta - ci), 5), round(float(delta + ci), 5)),
     }
 
