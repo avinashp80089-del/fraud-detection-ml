@@ -62,7 +62,9 @@ FEATURE_COLS = [
 
 
 def handle_class_imbalance(X: np.ndarray, y: np.ndarray, random_state: int = 42):
-    smote = SMOTE(sampling_strategy=0.1, random_state=random_state, k_neighbors=5)
+    n_minority = int((y == 1).sum())
+    k_neighbors = min(5, n_minority - 1)
+    smote = SMOTE(sampling_strategy=0.1, random_state=random_state, k_neighbors=k_neighbors)
     return smote.fit_resample(X, y)
 
 
